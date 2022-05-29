@@ -8,11 +8,14 @@ use super::vm_area::VMArea;
 use super::vm_chunk_manager::ChunkManager;
 use super::vm_perms::VMPerms;
 use super::vm_util::*;
+use crate::fs::inode_file::{AsINodeFile, INodeFile};
 use crate::process::{ThreadRef, ThreadStatus};
+// use crate::vm::rcore_fs_ramfs::{LockedINode, RamFSINode};
 use std::ops::Bound::{Excluded, Included};
 
 use crate::util::sync::rw_lock;
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
+use std::sync::atomic::{AtomicI32, Ordering};
 
 // Incorrect order of locks could cause deadlock easily.
 // Don't hold a low-order lock and then try to get a high-order lock.
@@ -66,7 +69,26 @@ impl VMManager {
         return_errno!(ENOMEM, "can't allocate free chunks");
     }
 
+    // Return the open inode if this mmap represents a posix shared memory
+    fn is_posix_shm<'a>(&'a self, options: &'a VMMapOptions) -> Option<&'a INodeFile> {
+        const POSIX_SHM_PATH: &str = "/dev/shm";
+        if let Some(writeback_file) = options.writeback_file() {
+            if let Ok(inode_file) = writeback_file.0.as_inode_file() {
+                let file_path = inode_file.abs_path();
+                if file_path.starts_with(POSIX_SHM_PATH) {
+                    return Some(inode_file);
+                }
+            }
+        }
+        None
+    }
+
     pub fn mmap(&self, options: &VMMapOptions) -> Result<usize> {
+        // Handle posix shared memory case
+        if let Some(inode_file) = self.is_posix_shm(options) {
+            return self.internal().mmap_shared_chunk(options, inode_file);
+        }
+
         let addr = *options.addr();
         let size = *options.size();
         let align = *options.align();
@@ -243,6 +265,12 @@ impl VMManager {
                 .iter()
                 .find(|&chunk| chunk.range().intersect(&munmap_range).is_some());
             if chunk.is_none() {
+                // The munmap range may reprensent a shared chunk
+                if let Some(inode_ptr) = self.internal().check_range_shared(&munmap_range) {
+                    if let Some(shared_chunk) = self.internal().munmap_shared_chunk(inode_ptr) {
+                        self.internal().munmap_chunk(&shared_chunk, None);
+                    }
+                }
                 // Note:
                 // The man page of munmap states that "it is not an error if the indicated
                 // range does not contain any mapped pages". This is not considered as
@@ -611,6 +639,53 @@ impl VMManager {
     }
 }
 
+#[derive(Debug)]
+pub(crate) struct SharedChunk {
+    chunk: ChunkRef,
+    shared_cnt: AtomicI32,
+    pids: HashSet<pid_t>,
+}
+
+impl SharedChunk {
+    pub fn new(chunk: ChunkRef, pid: pid_t) -> Self {
+        let mut pids = HashSet::new();
+        pids.insert(pid);
+        Self {
+            chunk,
+            shared_cnt: AtomicI32::new(1),
+            pids,
+        }
+    }
+
+    // TODO: Consider `offset`
+    pub fn get_addr(&self) -> usize {
+        self.chunk.range().start()
+    }
+
+    pub fn chunk(&self) -> ChunkRef {
+        self.chunk.clone()
+    }
+
+    pub fn add_process(&mut self, pid: pid_t) {
+        if !self.pids.contains(&pid) {
+            self.shared_cnt.fetch_add(1, Ordering::Relaxed);
+        }
+        self.pids.insert(pid);
+    }
+
+    pub fn remove_process(&mut self, pid: pid_t) -> bool {
+        self.shared_cnt.fetch_sub(1, Ordering::Relaxed);
+        if self.pids.contains(&pid) {
+            self.pids.remove(&pid);
+        }
+        return self.shared_cnt.load(Ordering::Relaxed) <= 0;
+    }
+
+    pub fn check_shared(&self, vm_range: &VMRange, pid: pid_t) -> bool {
+        self.chunk.range().start() == vm_range.start() || self.pids.contains(&pid)
+    }
+}
+
 // Modification on this structure must aquire the global lock.
 // TODO: Enable fast_default_chunks for faster chunk allocation
 #[derive(Debug)]
@@ -618,6 +693,8 @@ pub struct InternalVMManager {
     chunks: BTreeSet<ChunkRef>, // track in-use chunks, use B-Tree for better performance and simplicity (compared with red-black tree)
     fast_default_chunks: Vec<ChunkRef>, // empty default chunks
     free_manager: VMFreeSpaceManager,
+    // TODO: The key should be inode rather file path
+    shared_chunks: HashMap<String, SharedChunk>, // track shared chunks
 }
 
 impl InternalVMManager {
@@ -625,10 +702,12 @@ impl InternalVMManager {
         let chunks = BTreeSet::new();
         let fast_default_chunks = Vec::new();
         let free_manager = VMFreeSpaceManager::new(vm_range);
+        let shared_chunks = HashMap::new();
         Self {
             chunks,
             fast_default_chunks,
             free_manager,
+            shared_chunks,
         }
     }
 
@@ -642,6 +721,72 @@ impl InternalVMManager {
         trace!("allocate a default chunk = {:?}", chunk);
         self.chunks.insert(chunk.clone());
         Ok(chunk)
+    }
+
+    pub fn mmap_shared_chunk(
+        &mut self,
+        options: &VMMapOptions,
+        inode_file: &INodeFile,
+    ) -> Result<usize> {
+        // let inode = inode_file.inode();
+        // let inode_ptr = Arc::as_ptr(&inode) as *const LockedINode as usize
+        // ISSUE: Why return None?
+        // let ramfs_inode = inode.downcast_ref::<LockedINode>().unwrap();
+        let inode_ptr = inode_file.abs_path().to_string();
+        let current_pid = current!().process().pid();
+        match self.shared_chunks.get_mut(&inode_ptr) {
+            // Hit existing shared chunk
+            Some(shared_chunk) => {
+                shared_chunk.add_process(current_pid);
+                current!().vm().add_mem_chunk(shared_chunk.chunk().clone());
+                return Ok(shared_chunk.get_addr());
+            }
+            // First mmap, create a shared chunk
+            None => {
+                if let Ok(new_chunk) = self.mmap_chunk(options) {
+                    current!().vm().add_mem_chunk(new_chunk.clone());
+                    let new_shared_chunk = SharedChunk::new(new_chunk, current_pid);
+                    let addr = new_shared_chunk.get_addr();
+                    self.shared_chunks.insert(inode_ptr, new_shared_chunk);
+                    return Ok(addr);
+                }
+                return_errno!(ENOMEM, "can't allocate a shared chunk");
+            }
+        };
+    }
+
+    pub fn munmap_shared_chunk(&mut self, inode_ptr: &String) -> Option<ChunkRef> {
+        let mut shared_chunk = self.shared_chunks.get_mut(inode_ptr).unwrap();
+        let current_pid = current!().process().pid();
+        if shared_chunk.remove_process(current_pid) {
+            let chunk = shared_chunk.chunk();
+            self.shared_chunks.remove(inode_ptr);
+            current!().vm().remove_mem_chunk(&chunk);
+            // self.munmap_chunk(&shared_chunk.chunk(), None)?; // Can't do that
+            return Some(chunk);
+        }
+        None
+    }
+
+    // TODO: Fix cannot get pid when process drop
+    pub fn detach_process_shm(&mut self, pid: pid_t) {
+        let drained = self
+            .shared_chunks
+            .drain_filter(|_, v| v.remove_process(pid));
+        let mut process_chunks = drained.collect::<Vec<_>>();
+        for (_, shared_chunk) in process_chunks {
+            self.munmap_chunk(&shared_chunk.chunk(), None);
+        }
+    }
+
+    pub fn check_range_shared(&self, vm_range: &VMRange) -> Option<&String> {
+        for (inode_ptr, shared_chunk) in self.shared_chunks.iter() {
+            let current_pid = current!().process().pid();
+            if shared_chunk.check_shared(vm_range, current_pid) {
+                return Some(inode_ptr);
+            }
+        }
+        None
     }
 
     // Allocate a chunk with single vma

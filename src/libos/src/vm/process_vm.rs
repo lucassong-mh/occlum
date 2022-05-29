@@ -273,8 +273,27 @@ impl Drop for ProcessVM {
         mem_chunks
             .drain_filter(|chunk| chunk.is_single_vma())
             .for_each(|chunk| {
+                if let Some(shm_path) = USER_SPACE_VM_MANAGER
+                    .internal()
+                    .check_range_shared(chunk.range())
+                {
+                    if let Some(shared_chunk) = USER_SPACE_VM_MANAGER
+                        .internal()
+                        .munmap_shared_chunk(shm_path)
+                    {
+                        USER_SPACE_VM_MANAGER
+                            .internal()
+                            .munmap_chunk(&shared_chunk, None);
+                    }
+                }
                 USER_SPACE_VM_MANAGER.internal().munmap_chunk(&chunk, None);
             });
+
+        // Free process's shared memory if needed
+        // ISSUE: pid here always equals 0
+        // USER_SPACE_VM_MANAGER
+        //     .internal()
+        //     .detach_process_shm(current!().process().pid());
 
         assert!(mem_chunks.len() == 0);
         info!("Process VM dropped");
