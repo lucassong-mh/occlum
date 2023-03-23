@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1679525648798,
+  "lastUpdate": 1679540359850,
   "repoUrl": "https://github.com/lucassong-mh/occlum",
   "entries": {
     "FIO Benchmark on AsyncSFS and JinDisk": [
@@ -94,6 +94,54 @@ window.BENCHMARK_DATA = {
           {
             "name": "Random Read Throughput",
             "value": 150,
+            "unit": "MiB/s",
+            "extra": "randread"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "1498430017@qq.com",
+            "name": "Shaowei Song",
+            "username": "lucassong-mh"
+          },
+          "committer": {
+            "email": "1498430017@qq.com",
+            "name": "Shaowei Song",
+            "username": "lucassong-mh"
+          },
+          "distinct": true,
+          "id": "d0655d41563c6129fd8eff74c00bf917cdf21509",
+          "message": "Test new benchmark ci",
+          "timestamp": "2023-03-23T10:24:31+08:00",
+          "tree_id": "ffafae79e3b8202ad5e10f5334d279bc01287881",
+          "url": "https://github.com/lucassong-mh/occlum/commit/d0655d41563c6129fd8eff74c00bf917cdf21509"
+        },
+        "date": 1679540358814,
+        "tool": "customBiggerIsBetter",
+        "benches": [
+          {
+            "name": "Sequential Write Throughput",
+            "value": 54.8,
+            "unit": "MiB/s",
+            "extra": "seqwrite"
+          },
+          {
+            "name": "Random Write Throughput",
+            "value": 41.5,
+            "unit": "MiB/s",
+            "extra": "randwrite"
+          },
+          {
+            "name": "Sequential Read Throughput",
+            "value": 309,
+            "unit": "MiB/s",
+            "extra": "seqread"
+          },
+          {
+            "name": "Random Read Throughput",
+            "value": 154,
             "unit": "MiB/s",
             "extra": "randread"
           }
