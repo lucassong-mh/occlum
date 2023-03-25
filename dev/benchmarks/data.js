@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1679782659329,
+  "lastUpdate": 1679784440122,
   "repoUrl": "https://github.com/lucassong-mh/occlum",
   "entries": {
     "FIO Benchmark on AsyncSFS and JinDisk": [
@@ -652,6 +652,52 @@ window.BENCHMARK_DATA = {
           {
             "name": "Random Read Throughput",
             "value": 211,
+            "unit": "MiB/s",
+            "extra": "randread"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "name": "Zheng, Qi",
+            "username": "qzheng527",
+            "email": "huaiqing.zq@antgroup.com"
+          },
+          "committer": {
+            "name": "volcano",
+            "username": "volcano0dr",
+            "email": "volcano.dr@hotmail.com"
+          },
+          "id": "386e968ccb08bdd763e1915eafc39d8fb9df2226",
+          "message": "[libos] Enable backtrace for memory allocation failure",
+          "timestamp": "2023-01-29T02:52:47Z",
+          "url": "https://github.com/lucassong-mh/occlum/commit/386e968ccb08bdd763e1915eafc39d8fb9df2226"
+        },
+        "date": 1679784439121,
+        "tool": "customBiggerIsBetter",
+        "benches": [
+          {
+            "name": "Sequential Write Throughput",
+            "value": 54.9,
+            "unit": "MiB/s",
+            "extra": "seqwrite"
+          },
+          {
+            "name": "Random Write Throughput",
+            "value": 52.8,
+            "unit": "MiB/s",
+            "extra": "randwrite"
+          },
+          {
+            "name": "Sequential Read Throughput",
+            "value": 323,
+            "unit": "MiB/s",
+            "extra": "seqread"
+          },
+          {
+            "name": "Random Read Throughput",
+            "value": 212,
             "unit": "MiB/s",
             "extra": "randread"
           }
