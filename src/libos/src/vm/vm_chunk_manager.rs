@@ -72,9 +72,16 @@ impl ChunkManager {
         self.vmas.iter().count() == 2 // only sentry vmas
     }
 
-    pub fn clean_vmas_with_pid(&mut self, pid: pid_t) {
+    pub async fn clean_vmas_with_pid(&mut self, pid: pid_t) {
+        for vma in self.clean_vmas_without_flush_file(pid) {
+            Self::flush_file_vma(&vma).await;
+        }
+    }
+
+    pub fn clean_vmas_without_flush_file(&mut self, pid: pid_t) -> Vec<VMArea> {
         let mut vmas_cursor = self.vmas.cursor_mut();
         vmas_cursor.move_next(); // move to the first element of the tree
+        let mut cleaned_vmas = Vec::new();
         while !vmas_cursor.is_null() {
             let vma = vmas_cursor.get().unwrap().vma();
             if vma.pid() != pid || vma.size() == 0 {
@@ -83,7 +90,7 @@ impl ChunkManager {
                 continue;
             }
 
-            Self::flush_file_vma(vma);
+            cleaned_vmas.push(vma.clone());
 
             if !vma.perms().is_default() {
                 VMPerms::apply_perms(vma, VMPerms::default());
@@ -100,15 +107,16 @@ impl ChunkManager {
             // Remove this vma from vmas list
             vmas_cursor.remove();
         }
+        cleaned_vmas
     }
 
-    pub fn mmap(&mut self, options: &VMMapOptions) -> Result<usize> {
+    pub async fn mmap(&mut self, options: &VMMapOptions) -> Result<usize> {
         let addr = *options.addr();
         let size = *options.size();
         let align = *options.align();
 
         if let VMMapAddr::Force(addr) = addr {
-            self.munmap(addr, size)?;
+            self.munmap(addr, size).await?;
         }
 
         // Find and allocate a new range for this mmap request
@@ -142,7 +150,7 @@ impl ChunkManager {
         Ok(new_addr)
     }
 
-    pub fn munmap_range(&mut self, range: VMRange) -> Result<()> {
+    pub async fn munmap_range(&mut self, range: VMRange) -> Result<()> {
         // The bound should be no smaller than the chunk range's start address.
         let bound = range.start().max(self.range.start());
 
@@ -166,7 +174,7 @@ impl ChunkManager {
             };
 
             // File-backed VMA needs to be flushed upon munmap
-            Self::flush_file_vma(&intersection_vma);
+            Self::flush_file_vma(&intersection_vma).await;
             if !&intersection_vma.perms().is_default() {
                 VMPerms::apply_perms(&intersection_vma, VMPerms::default());
             }
@@ -204,7 +212,7 @@ impl ChunkManager {
         Ok(())
     }
 
-    pub fn munmap(&mut self, addr: usize, size: usize) -> Result<()> {
+    pub async fn munmap(&mut self, addr: usize, size: usize) -> Result<()> {
         let size = {
             if size == 0 {
                 return_errno!(EINVAL, "size of munmap must not be zero");
@@ -226,7 +234,7 @@ impl ChunkManager {
             effective_munmap_range
         };
 
-        self.munmap_range(munmap_range)
+        self.munmap_range(munmap_range).await
     }
 
     pub fn parse_mremap_options(&mut self, options: &VMRemapOptions) -> Result<VMRemapResult> {
@@ -383,7 +391,7 @@ impl ChunkManager {
 
     /// Sync all shared, file-backed memory mappings in the given range by flushing the
     /// memory content to its underlying file.
-    pub fn msync_by_range(&mut self, sync_range: &VMRange) -> Result<()> {
+    pub async fn msync_by_range(&mut self, sync_range: &VMRange) -> Result<()> {
         if !self.range().is_superset_of(sync_range) {
             return_errno!(ENOMEM, "invalid range");
         }
@@ -394,27 +402,27 @@ impl ChunkManager {
                 None => continue,
                 Some(vma) => vma,
             };
-            Self::flush_file_vma(&vma);
+            Self::flush_file_vma(&vma).await;
         }
         Ok(())
     }
 
     /// Sync all shared, file-backed memory mappings of the given file by flushing
     /// the memory content to the file.
-    pub fn msync_by_file(&mut self, sync_file: &FileRef) {
+    pub async fn msync_by_file(&mut self, sync_file: &FileRef) {
         let is_same_file = |file: &FileRef| -> bool { file == sync_file };
         for vma_obj in &self.vmas {
-            Self::flush_file_vma_with_cond(&vma_obj.vma(), is_same_file);
+            Self::flush_file_vma_with_cond(&vma_obj.vma(), is_same_file).await;
         }
     }
 
     /// Flush a file-backed VMA to its file. This has no effect on anonymous VMA.
-    pub fn flush_file_vma(vma: &VMArea) {
-        Self::flush_file_vma_with_cond(vma, |_| true)
+    pub async fn flush_file_vma(vma: &VMArea) {
+        Self::flush_file_vma_with_cond(vma, |_| true).await
     }
 
     /// Same as flush_vma, except that an extra condition on the file needs to satisfy.
-    pub fn flush_file_vma_with_cond<F: Fn(&FileRef) -> bool>(vma: &VMArea, cond_fn: F) {
+    pub async fn flush_file_vma_with_cond<F: Fn(&FileRef) -> bool>(vma: &VMArea, cond_fn: F) {
         let (file, file_offset) = match vma.writeback_file() {
             None => return,
             Some((file_and_offset)) => file_and_offset,
@@ -430,9 +438,8 @@ impl ChunkManager {
         file_handle
             .dentry()
             .inode()
-            .as_sync_inode()
-            .unwrap()
-            .write_at(file_offset, unsafe { vma.as_slice() });
+            .write_at(file_offset, unsafe { vma.as_slice() })
+            .await;
     }
 
     pub fn find_mmap_region(&self, addr: usize) -> Result<VMRange> {

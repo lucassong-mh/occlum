@@ -186,7 +186,9 @@ impl<'a, 'b> ProcessVMBuilder<'a, 'b> {
 
     fn handle_error_when_init(&self, chunks: &HashSet<Arc<Chunk>>) {
         chunks.iter().for_each(|chunk| {
-            USER_SPACE_VM_MANAGER.internal().munmap_chunk(chunk, None);
+            USER_SPACE_VM_MANAGER
+                .internal()
+                .munmap_chunk_without_flush_file(chunk, None);
         });
     }
 
@@ -296,7 +298,9 @@ impl Drop for ProcessVM {
         mem_chunks
             .drain_filter(|chunk| chunk.is_single_vma())
             .for_each(|chunk| {
-                USER_SPACE_VM_MANAGER.internal().munmap_chunk(&chunk, None);
+                USER_SPACE_VM_MANAGER
+                    .internal()
+                    .munmap_chunk_without_flush_file(&chunk, None);
             });
 
         assert!(mem_chunks.len() == 0);
@@ -478,7 +482,7 @@ impl ProcessVM {
         free_size
     }
 
-    pub fn mmap(
+    pub async fn mmap(
         &self,
         addr: usize,
         size: usize,
@@ -521,11 +525,11 @@ impl ProcessVM {
             .perms(perms)
             .initializer(initializer)
             .build()?;
-        let mmap_addr = USER_SPACE_VM_MANAGER.mmap(&mmap_options)?;
+        let mmap_addr = USER_SPACE_VM_MANAGER.mmap(&mmap_options).await?;
         Ok(mmap_addr)
     }
 
-    pub fn mremap(
+    pub async fn mremap(
         &self,
         old_addr: usize,
         old_size: usize,
@@ -533,11 +537,11 @@ impl ProcessVM {
         flags: MRemapFlags,
     ) -> Result<usize> {
         let mremap_option = VMRemapOptions::new(old_addr, old_size, new_size, flags)?;
-        USER_SPACE_VM_MANAGER.mremap(&mremap_option)
+        USER_SPACE_VM_MANAGER.mremap(&mremap_option).await
     }
 
-    pub fn munmap(&self, addr: usize, size: usize) -> Result<()> {
-        USER_SPACE_VM_MANAGER.munmap(addr, size)
+    pub async fn munmap(&self, addr: usize, size: usize) -> Result<()> {
+        USER_SPACE_VM_MANAGER.munmap(addr, size).await
     }
 
     pub fn mprotect(&self, addr: usize, size: usize, perms: VMPerms) -> Result<()> {
@@ -552,12 +556,12 @@ impl ProcessVM {
         return USER_SPACE_VM_MANAGER.mprotect(addr, size, perms);
     }
 
-    pub fn msync(&self, addr: usize, size: usize) -> Result<()> {
-        return USER_SPACE_VM_MANAGER.msync(addr, size);
+    pub async fn msync(&self, addr: usize, size: usize) -> Result<()> {
+        return USER_SPACE_VM_MANAGER.msync(addr, size).await;
     }
 
-    pub fn msync_by_file(&self, sync_file: &FileRef) {
-        return USER_SPACE_VM_MANAGER.msync_by_file(sync_file);
+    pub async fn msync_by_file(&self, sync_file: &FileRef) {
+        return USER_SPACE_VM_MANAGER.msync_by_file(sync_file).await;
     }
 
     // Return: a copy of the found region

@@ -213,7 +213,7 @@ impl Drop for ShmSegment {
         assert!(self.process_set.len() == 0);
         USER_SPACE_VM_MANAGER
             .internal()
-            .munmap_chunk(&self.chunk, None);
+            .munmap_chunk_without_flush_file(&self.chunk, None);
     }
 }
 

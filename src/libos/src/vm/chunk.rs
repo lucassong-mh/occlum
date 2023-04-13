@@ -150,7 +150,7 @@ impl Chunk {
         }
     }
 
-    pub fn mmap(&self, options: &VMMapOptions) -> Result<usize> {
+    pub async fn mmap(&self, options: &VMMapOptions) -> Result<usize> {
         debug_assert!(!self.is_single_vma());
         trace!("try allocate in chunk: {:?}", self);
         let mut internal_manager = if let ChunkType::MultiVMA(internal_manager) = &self.internal {
@@ -161,10 +161,10 @@ impl Chunk {
         if internal_manager.chunk_manager.free_size() < options.size() {
             return_errno!(ENOMEM, "no enough size without trying. try other chunks");
         }
-        return internal_manager.chunk_manager.mmap(options);
+        return internal_manager.chunk_manager.mmap(options).await;
     }
 
-    pub fn try_mmap(&self, options: &VMMapOptions) -> Result<usize> {
+    pub async fn try_mmap(&self, options: &VMMapOptions) -> Result<usize> {
         debug_assert!(!self.is_single_vma());
         // Try lock ChunkManager. If it fails, just return and will try other chunks.
         let mut internal_manager = if let ChunkType::MultiVMA(internal_manager) = &self.internal {
@@ -178,7 +178,7 @@ impl Chunk {
         if internal_manager.chunk_manager().free_size() < options.size() {
             return_errno!(ENOMEM, "no enough size without trying. try other chunks");
         }
-        internal_manager.chunk_manager_mut().mmap(options)
+        internal_manager.chunk_manager_mut().mmap(options).await
     }
 
     pub fn is_single_vma(&self) -> bool {
@@ -297,14 +297,24 @@ impl ChunkInternal {
     }
 
     // Clean vmas when munmap a MultiVMA chunk, return whether this chunk is cleaned
-    pub fn clean_multi_vmas(&mut self) -> bool {
+    pub async fn clean_multi_vmas(&mut self) -> bool {
+        let (is_cleaned, cleaned_vmas) = self.clean_multi_vmas_without_flush_file();
+        for vma in cleaned_vmas {
+            ChunkManager::flush_file_vma(&vma).await;
+        }
+        is_cleaned
+    }
+
+    pub fn clean_multi_vmas_without_flush_file(&mut self) -> (bool, Vec<VMArea>) {
         let current_pid = current!().process().pid();
-        self.chunk_manager.clean_vmas_with_pid(current_pid);
+        let cleaned_vmas = self
+            .chunk_manager
+            .clean_vmas_without_flush_file(current_pid);
         if self.chunk_manager.is_empty() {
             self.process_set.remove(&current_pid);
-            return true;
+            return (true, cleaned_vmas);
         } else {
-            return false;
+            return (false, cleaned_vmas);
         }
     }
 }

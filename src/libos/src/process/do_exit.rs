@@ -88,7 +88,7 @@ async fn exit_thread(term_status: TermStatus) {
     // If this thread is the last thread, close all files then exit the process
     if num_remaining_threads == 0 {
         thread.close_all_files_when_exit().await;
-        exit_process(&thread, term_status, None);
+        exit_process(&thread, term_status, None).await;
     }
 
     // Notify a thread, if any, that wait on this thread to exit.
@@ -96,7 +96,11 @@ async fn exit_thread(term_status: TermStatus) {
     futex_wake(Arc::as_ptr(&thread.process()) as *const i32, 1);
 }
 
-fn exit_process(thread: &ThreadRef, term_status: TermStatus, new_parent_ref: Option<ProcessRef>) {
+async fn exit_process(
+    thread: &ThreadRef,
+    term_status: TermStatus,
+    new_parent_ref: Option<ProcessRef>,
+) {
     let process = thread.process();
     // Deadlock note: always lock parent first, then child.
 
@@ -124,7 +128,7 @@ fn exit_process(thread: &ThreadRef, term_status: TermStatus, new_parent_ref: Opt
     // Lock the current process
     let mut process_inner = process.inner();
     // Clean used VM
-    USER_SPACE_VM_MANAGER.free_chunks_when_exit(thread);
+    USER_SPACE_VM_MANAGER.free_chunks_when_exit(thread).await;
     SHM_MANAGER.detach_shm_when_process_exit(thread);
 
     if let Some(new_parent_ref) = new_parent_ref {
@@ -197,7 +201,7 @@ fn wake_host(process: &ProcessRef, term_status: TermStatus) {
     }
 }
 
-pub fn exit_old_process_for_execve(term_status: TermStatus, new_parent_ref: ProcessRef) {
+pub async fn exit_old_process_for_execve(term_status: TermStatus, new_parent_ref: ProcessRef) {
     let thread = current!();
 
     // Exit current thread
@@ -209,5 +213,5 @@ pub fn exit_old_process_for_execve(term_status: TermStatus, new_parent_ref: Proc
     }
 
     debug_assert!(num_remaining_threads == 0);
-    exit_process(&thread, term_status, Some(new_parent_ref));
+    exit_process(&thread, term_status, Some(new_parent_ref)).await;
 }
