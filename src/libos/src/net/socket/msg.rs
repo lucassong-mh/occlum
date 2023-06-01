@@ -34,6 +34,15 @@ pub struct msghdr_mut {
     pub msg_flags: c_int,
 }
 
+/// C struct for ancillary data object information of a socket
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct cmsghdr {
+    pub cmsg_len: size_t,
+    pub cmsg_level: c_int,
+    pub cmsg_type: c_int,
+}
+
 /// MsgHdr is a memory-safe, immutable wrapper of msghdr
 pub struct MsgHdr<'a> {
     name: Option<&'a [u8]>,
@@ -94,6 +103,68 @@ impl<'a> MsgHdr<'a> {
 
     pub fn get_flags(&self) -> MsgHdrFlags {
         self.flags
+    }
+}
+
+pub struct CmsgHdr<'a> {
+    cmsg_len: usize,
+    cmsg_level: i32,             // only support SOL_SOCKET
+    cmsg_type: i32,              // only support SCM_RIGHTS
+    cmsg_data: Option<FileDesc>, // only support send one file descriptor
+    msg_control: &'a mut [u8],
+}
+
+impl<'a> CmsgHdr<'a> {
+    pub fn from_bytes(msg_control: &'a mut [u8]) -> Option<Self> {
+        let mut cmsg_hdr: cmsghdr = {
+            let mut cmsg_hdr = unsafe { core::mem::MaybeUninit::uninit().assume_init() };
+            let ptr = &mut cmsg_hdr as *mut cmsghdr as *mut u8;
+            let len = core::mem::size_of::<cmsghdr>();
+            unsafe {
+                core::slice::from_raw_parts_mut(ptr, len).copy_from_slice(&msg_control[..len])
+            };
+            cmsg_hdr
+        };
+
+        const SOL_SOCKET: i32 = 1;
+        const SCM_RIGHTS: i32 = 1;
+        if cmsg_hdr.cmsg_len == 0
+            || cmsg_hdr.cmsg_level != SOL_SOCKET
+            || cmsg_hdr.cmsg_type != SCM_RIGHTS
+        {
+            error!("msg_control with cmsghdr: {:?} not supported", cmsg_hdr);
+            return None;
+        }
+
+        let cmsg_data_fd = {
+            let cmsghdr_size = core::mem::size_of::<cmsghdr>();
+            // FIXME: How to check little/big endian?
+            FileDesc::from_le_bytes(
+                msg_control[cmsghdr_size..cmsghdr_size + core::mem::size_of::<FileDesc>()]
+                    .try_into()
+                    .unwrap(),
+            )
+        };
+
+        Some(Self {
+            cmsg_len: cmsg_hdr.cmsg_len,
+            cmsg_level: cmsg_hdr.cmsg_level,
+            cmsg_type: cmsg_hdr.cmsg_type,
+            cmsg_data: Some(cmsg_data_fd),
+            msg_control,
+        })
+    }
+
+    pub fn get_fd(&self) -> Option<FileDesc> {
+        self.cmsg_data
+    }
+
+    pub fn set_fd(&mut self, fd: FileDesc) {
+        self.cmsg_data.insert(fd);
+        let cmsghdr_size = core::mem::size_of::<cmsghdr>();
+        // FIXME: How to check little/big endian?
+        self.msg_control[cmsghdr_size..cmsghdr_size + core::mem::size_of::<FileDesc>()]
+            .copy_from_slice(&fd.to_le_bytes());
     }
 }
 
