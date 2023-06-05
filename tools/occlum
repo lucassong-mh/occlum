@@ -67,6 +67,7 @@ Usage:
 
     occlum init
         Initialize a directory as the Occlum instance.
+        To prepare legacy Occlum configuration (SEFS), give the [--legacy-config] flag.
 
     occlum build [--sign-key <key_path>] [--sign-tool <tool_path>] [--image-key <key_path>] [-f/--force]
         Build and sign an Occlum SGX enclave (.so) and generate its associated secure
@@ -273,6 +274,9 @@ cmd_init() {
     cp "$occlum_dir"/build/bin/init initfs/bin/
 
     cp "$occlum_dir"/etc/template/Occlum.yaml "$instance_dir"/
+    if [ "$1" = "--legacy-config" ]; then
+       cp -f "$occlum_dir"/etc/template/Occlum-legacy.yaml "$instance_dir"/Occlum.yaml 
+    fi
     chmod 644 "$instance_dir"/Occlum.yaml
 
     echo "$instance_dir initialized as an Occlum instance"
@@ -677,7 +681,7 @@ case "$cmd" in
         cmd_new "${@:2:1}"
         ;;
     init)
-        cmd_init
+        cmd_init "${@:2:1}"
         ;;
     build)
         cmd_build "${@:2}"

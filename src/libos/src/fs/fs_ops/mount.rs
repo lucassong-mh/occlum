@@ -78,10 +78,10 @@ pub async fn do_mount(
                     options: Default::default(),
                 };
                 let container_mc = ConfigMount {
-                    type_: ConfigMountFsType::TYPE_SEFS,
+                    type_: ConfigMountFsType::TYPE_ASYNC_SFS,
                     target: target.clone(),
                     source: Some(unionfs_options.upper_dir.clone()),
-                    options: Default::default(),
+                    options: ConfigMountOptions::gen_async_sfs_default(),
                 };
 
                 ConfigMount {

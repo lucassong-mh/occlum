@@ -200,6 +200,10 @@ impl<K: PageKey, A: PageAlloc> PageCacheInner<K, A> {
         self.id
     }
 
+    pub fn size(&self) -> usize {
+        self.cache.lock().len()
+    }
+
     /// Poll the readiness events on a page cache.
     pub fn poll(&self, poller: Option<&Poller>) -> Events {
         self.pollee.poll(Events::OUT, poller)

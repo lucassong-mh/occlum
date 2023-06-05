@@ -108,11 +108,16 @@ impl<K: PageKey, A: PageAlloc> EvictorTaskInner<K, A> {
     async fn task_main(&self) {
         let mut waiter = Waiter::new();
         self.evictor_wq.enqueue(&mut waiter);
-        const AUTO_EVICT_PERIOD: Duration = Duration::from_millis(10);
-        while !self.is_dropped() {
+        const AUTO_EVICT_PERIOD: Duration = Duration::from_millis(50);
+        'outer: while !self.is_dropped() {
             waiter.reset();
 
             while A::is_memory_low() {
+                for cache in self.caches.lock().iter() {
+                    if cache.size() == 0 {
+                        break 'outer;
+                    }
+                }
                 self.evict_pages().await;
             }
 
@@ -178,5 +183,11 @@ impl<K: PageKey, A: PageAlloc> EvictorTaskInner<K, A> {
 
     fn is_dropped(&self) -> bool {
         self.is_dropped.load(Ordering::Relaxed)
+    }
+}
+
+impl<K: PageKey, A: PageAlloc> Drop for EvictorTaskInner<K, A> {
+    fn drop(&mut self) {
+        self.is_dropped.store(true, Ordering::Relaxed);
     }
 }
