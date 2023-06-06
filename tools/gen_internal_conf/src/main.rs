@@ -400,12 +400,8 @@ fn gen_app_config(
                             },
                             {
                                 "target": "/",
-                                "type": "async_sfs",
-                                "source": "./run/initfs/__ROOT",
-                                "options": {
-                                    "async_sfs_total_size": "10GB",
-                                    "page_cache_size": "256MB"
-                                }
+                                "type": "sefs",
+                                "source": "./run/initfs/__ROOT"
                             }
                         ]
                     }

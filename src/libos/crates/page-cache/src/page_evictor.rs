@@ -41,10 +41,15 @@ impl<K: PageKey, A: PageAlloc> PageEvictor<K, A> {
         lazy_static! {
             static ref EVICTOR_TASKS: Mutex<AnyMap> = Mutex::new(AnyMap::new());
         }
-
         let mut tasks = EVICTOR_TASKS.lock();
-        tasks.insert(EvictorTask::<K, A>::new());
-        tasks.get::<EvictorTask<K, A>>().unwrap().0.clone()
+
+        if let Some(task) = tasks.get::<EvictorTask<K, A>>() {
+            task.0.clone()
+        } else {
+            let new_task = EvictorTask::<K, A>::new();
+            tasks.insert(new_task.clone());
+            new_task.0
+        }
     }
 }
 
@@ -101,30 +106,21 @@ impl<K: PageKey, A: PageAlloc> EvictorTaskInner<K, A> {
         let id = page_cache.id();
         let mut caches = self.caches.lock();
         caches.retain(|v| v.id() != id);
-        self.is_dropped.store(true, Ordering::Relaxed);
     }
 
     #[allow(unused)]
     async fn task_main(&self) {
         let mut waiter = Waiter::new();
         self.evictor_wq.enqueue(&mut waiter);
-        const AUTO_EVICT_PERIOD: Duration = Duration::from_millis(50);
-        'outer: while !self.is_dropped() {
+        while !self.is_dropped() {
             waiter.reset();
 
             while A::is_memory_low() {
-                for cache in self.caches.lock().iter() {
-                    if cache.size() == 0 {
-                        break 'outer;
-                    }
-                }
                 self.evict_pages().await;
             }
 
-            // Wait until being notified or timeout
-            // waiter.wait().await;
-            let mut timeout = AUTO_EVICT_PERIOD;
-            waiter.wait_timeout(Some(&mut timeout)).await;
+            // Wait until being notified
+            waiter.wait().await;
         }
         self.evictor_wq.dequeue(&mut waiter);
     }
