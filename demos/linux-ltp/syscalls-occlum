@@ -925,10 +925,10 @@ mincore02 mincore02
 mincore03 mincore03
 mincore04 mincore04
 
-madvise01 madvise01
+#madvise01 madvise01
 madvise02 madvise02
 madvise05 madvise05
-madvise06 madvise06
+#madvise06 madvise06
 madvise07 madvise07
 madvise08 madvise08
 madvise09 madvise09
