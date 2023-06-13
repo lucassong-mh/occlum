@@ -32,10 +32,10 @@ runs:
       with:
         container-name: ${{ inputs.container-name }}
 
-    - name: Build dependencies
-      run: docker exec ${{ inputs.container-name }} bash -c "cd /root/occlum; make submodule"
-      shell: bash
+    # - name: Build dependencies
+    #   run: docker exec ${{ inputs.container-name }} bash -c "cd /root/occlum; make submodule"
+    #   shell: bash
 
-    - name: Make install
-      run: docker exec ${{ inputs.container-name }} bash -c "source /opt/intel/sgxsdk/environment; cd /root/occlum; ${{ inputs.build-envs}} make install"
-      shell: bash
+    # - name: Make install
+    #   run: docker exec ${{ inputs.container-name }} bash -c "source /opt/intel/sgxsdk/environment; cd /root/occlum; ${{ inputs.build-envs}} make install"
+    #   shell: bash

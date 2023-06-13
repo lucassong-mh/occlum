@@ -19,7 +19,8 @@ members = [
     "page-cache",
     "sgx-disk",
     "sgx-untrusted-alloc",
-    "vdso-time"
+    "vdso-time",
+    "ci-disk-test"
 ]
 
 # Default members can run on Linux; non-default members can only run inside SGX.

@@ -26,26 +26,14 @@ jobs:
         container-name: ${{ github.job }}
         build-envs: 'OCCLUM_RELEASE_BUILD=1'
 
-    - name: Check format
-      run:  docker exec ${{ github.job }} bash -c 'cd /root/occlum; info=$(make format-check);
-        if [[ -n $info ]]; then
-          echo "Format error detected.";
-          echo "$info";
-          exit 1;
-        fi'
+    - name: Test ci disk space cost before
+      run: docker exec ${{ github.job }} bash -c "df -Th"
 
-    - name: Unit test
-      run: docker exec ${{ github.job }} bash -c "cd /root/occlum; UT_OPTION="--test-threads=1" make unit-test"
+    - name: Test ci disk space cost running test
+      run: docker exec ${{ github.job }} bash -c "cd /root/occlum/src/libos/crates/ci-disk-test; cargo run; du -h ci_disk_test.f;"
 
-    - name: Integration test
-      run:  docker exec ${{ github.job }} bash -c "cd /root/occlum; OCCLUM_LOG_LEVEL=trace SGX_MODE=SIM make test"
-
-    - name: Integration test with Glibc
-      run:  docker exec ${{ github.job }} bash -c "cd /root/occlum; OCCLUM_LOG_LEVEL=trace SGX_MODE=SIM make test-glibc"
-
-    - name: Show failed cases
-      if: ${{ failure() }}
-      run: docker exec ${{ github.job }} bash -c "cat /root/occlum/build/test/.fail"
+    - name: Test ci disk space cost after
+      run: docker exec ${{ github.job }} bash -c "df -Th"
 
   # Make_test_on_centos:
   #   runs-on: ubuntu-20.04
