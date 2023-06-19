@@ -696,19 +696,10 @@ impl InternalVMManager {
             MmapSharedResult::NeedCreate => {
                 let new_chunk = self.mmap_chunk(options)?;
                 current!().vm().add_mem_chunk(new_chunk.clone());
-                self.shm_manager
+                Ok(self
+                    .shm_manager
                     .create_shared_chunk(options, new_chunk.clone())
-                    .map_err(|e| {
-                        // Reset memory contents to zero and free it when creating error
-                        let vma = new_chunk.get_vma_for_single_vma_chunk();
-                        unsafe {
-                            let buf = vma.as_slice_mut();
-                            buf.iter_mut().for_each(|b| *b = 0)
-                        }
-                        self.free_chunk(&new_chunk);
-                        current!().vm().remove_mem_chunk(&new_chunk);
-                        e
-                    })
+                    .unwrap())
             }
             MmapSharedResult::NeedExpand(old_shared_chunk, addr) => {
                 let new_chunk = {
@@ -745,13 +736,7 @@ impl InternalVMManager {
             .munmap_shared_chunk(chunk, munmap_range, force_unmap)?
             == MunmapSharedResult::Freeable
         {
-            // Flush memory contents to backed file, then reset to zero and free it
-            let vma = chunk.get_vma_for_single_vma_chunk();
-            vma.flush_backed_file();
-            unsafe {
-                let buf = vma.as_slice_mut();
-                buf.iter_mut().for_each(|b| *b = 0)
-            }
+            chunk.get_vma_for_single_vma_chunk().flush_backed_file();
             self.free_chunk(chunk);
             let current = current!();
             if current.status() != ThreadStatus::Exited {
