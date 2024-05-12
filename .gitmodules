@@ -24,3 +24,9 @@
 [submodule "deps/resolv-conf"]
 	path = deps/resolv-conf
 	url = https://github.com/tailhook/resolv-conf.git
+[submodule "deps/mlsdisk"]
+	path = deps/mlsdisk
+	url = https://github.com/asterinas/mlsdisk
+[submodule "deps/ext2-rs"]
+	path = deps/ext2-rs
+	url = https://github.com/liqinggd/ext2-rs

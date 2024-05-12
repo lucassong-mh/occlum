@@ -3,18 +3,19 @@ use super::hostfs::HostFS;
 use super::procfs::ProcFS;
 use super::sefs::{SgxStorage, SgxUuidProvider};
 use super::*;
-use config::{ConfigApp, ConfigMountFsType};
-use std::mem::size_of;
-use std::path::{Path, PathBuf};
-use std::untrusted::path::PathEx;
+use crate::blk::{try_open_disk, SwornDiskMeta, BLOCK_SIZE, DEV_SWORNDISK_PATH};
+use crate::config::{ConfigApp, ConfigMountFsType};
+use crate::time::OcclumTimeProvider;
 
+use alloc::ffi::CString;
+use ext2_rs::{BlockDevice, Ext2, TimeProvider};
 use rcore_fs_mountfs::{MNode, MountFS};
 use rcore_fs_ramfs::RamFS;
 use rcore_fs_sefs::dev::*;
 use rcore_fs_sefs::SEFS;
 use rcore_fs_unionfs::UnionFS;
-
-use util::mem_util::from_user;
+use std::path::{Path, PathBuf};
+use std::untrusted::path::PathEx;
 
 lazy_static! {
     /// The root of file system
@@ -172,9 +173,50 @@ pub fn mount_nonroot_fs_according_to(
                 };
                 mount_fs_at(unionfs, root, &mc.target, follow_symlink)?;
             }
+            TYPE_EXT2 => {
+                let disk_size = mc.options.disk_size;
+                let source_path = mc.source.as_ref();
+                let ext2 = open_ext2(disk_size, user_key, source_path)?;
+                mount_fs_at(ext2, root, &mc.target, follow_symlink)?;
+            }
         }
     }
     Ok(())
+}
+
+fn open_ext2(
+    disk_size: Option<u64>,
+    user_key: &Option<sgx_key_128bit_t>,
+    source_path: Option<&PathBuf>,
+) -> Result<Arc<Ext2>> {
+    SwornDiskMeta::setup(disk_size, user_key, source_path)?;
+
+    let sworndisk = try_open_disk(DEV_SWORNDISK_PATH)?.unwrap().disk().clone();
+    let ext2 = match Ext2::open(sworndisk, Arc::new(OcclumTimeProvider)) {
+        Err(e) if e == ext2_rs::FsError::WrongFs => {
+            let sworndisk = format_disk_for_ext2()?;
+            Ext2::open(sworndisk, Arc::new(OcclumTimeProvider))?
+        }
+        res => res?,
+    };
+    Ok(ext2)
+}
+
+fn format_disk_for_ext2() -> Result<Arc<dyn BlockDevice>> {
+    // Format the SwornDisk using 'mke2fs' tool for Ext2
+    let path = PathBuf::from("/sbin/mke2fs");
+    let argv = vec![
+        CString::new("mke2fs").unwrap(),
+        CString::new("-q").unwrap(),
+        CString::new("-t").unwrap(),
+        CString::new("ext2").unwrap(),
+        CString::new(DEV_SWORNDISK_PATH).unwrap(),
+    ];
+    let pid = process::do_spawn(&path.to_str().unwrap(), &argv, &[], &[], None, &current!())?;
+    let _ = process::do_wait4(pid as _, core::ptr::null_mut(), 0)?;
+
+    let sworndisk = try_open_disk(DEV_SWORNDISK_PATH)?.unwrap().disk().clone();
+    Ok(sworndisk)
 }
 
 pub fn mount_fs_at(

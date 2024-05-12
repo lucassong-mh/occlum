@@ -18,6 +18,7 @@ macro_rules! try_libc_stdio {
 
 // Struct for the occlum_stdio_fds
 #[repr(C)]
+#[derive(Debug)]
 pub struct HostStdioFds {
     pub stdin_fd: i32,
     pub stdout_fd: i32,
@@ -27,11 +28,7 @@ pub struct HostStdioFds {
 impl HostStdioFds {
     pub fn from_user(ptr: *const HostStdioFds) -> Result<Self> {
         if ptr.is_null() {
-            return Ok(Self {
-                stdin_fd: libc::STDIN_FILENO,
-                stdout_fd: libc::STDOUT_FILENO,
-                stderr_fd: libc::STDERR_FILENO,
-            });
+            return Ok(Self::default());
         }
         let host_stdio_fds_c = unsafe { &*ptr };
         if host_stdio_fds_c.stdin_fd < 0
@@ -45,6 +42,16 @@ impl HostStdioFds {
             stdout_fd: host_stdio_fds_c.stdout_fd,
             stderr_fd: host_stdio_fds_c.stderr_fd,
         })
+    }
+}
+
+impl Default for HostStdioFds {
+    fn default() -> Self {
+        Self {
+            stdin_fd: libc::STDIN_FILENO,
+            stdout_fd: libc::STDOUT_FILENO,
+            stderr_fd: libc::STDERR_FILENO,
+        }
     }
 }
 

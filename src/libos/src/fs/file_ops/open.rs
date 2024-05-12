@@ -1,4 +1,5 @@
 use super::*;
+use crate::blk::try_open_disk;
 
 pub fn do_openat(fs_path: &FsPath, flags: u32, mode: FileMode) -> Result<FileDesc> {
     debug!(
@@ -13,7 +14,11 @@ pub fn do_openat(fs_path: &FsPath, flags: u32, mode: FileMode) -> Result<FileDes
     let fs = current.fs().read().unwrap();
     let masked_mode = mode & !current.process().umask();
 
-    let file_ref: Arc<dyn File> = fs.open_file(&path, flags, masked_mode)?;
+    let file_ref: Arc<dyn File> = if let Some(disk_file) = try_open_disk(&path)? {
+        disk_file
+    } else {
+        fs.open_file(&path, flags, masked_mode)?
+    };
 
     let fd = {
         let creation_flags = CreationFlags::from_bits_truncate(flags);

@@ -28,6 +28,8 @@
 #![feature(is_some_and)]
 // for edmm_api macro
 #![feature(linkage)]
+#![feature(let_chains)]
+#![feature(new_uninit)]
 
 #[macro_use]
 extern crate alloc;
@@ -82,6 +84,7 @@ mod prelude;
 #[macro_use]
 mod error;
 
+mod blk;
 mod config;
 mod entry;
 mod events;
