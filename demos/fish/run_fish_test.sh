@@ -11,7 +11,7 @@ cd occlum-instance
 new_json="$(jq '.resource_limits.user_space_size = "1MB" |
             .resource_limits.user_space_max_size = "512MB" |
             .resource_limits.kernel_space_heap_size = "1MB" |
-            .resource_limits.kernel_space_heap_max_size = "64MB" |
+            .resource_limits.kernel_space_heap_max_size = "3000MB" |
             .env.default = [ "OCCLUM=yes", "HOME=/root" ]' Occlum.json)" && \
     echo "${new_json}" > Occlum.json
 

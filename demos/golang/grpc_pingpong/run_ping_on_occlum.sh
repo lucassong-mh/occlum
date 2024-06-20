@@ -19,7 +19,7 @@ occlum init
 new_json="$(jq '.resource_limits.user_space_size = "1MB" |
 	.resource_limits.user_space_max_size = "800MB" |
 	.resource_limits.kernel_space_heap_size="1MB" |
-	.resource_limits.kernel_space_heap_max_size="80MB"  ' Occlum.json)" && \
+	.resource_limits.kernel_space_heap_max_size="3000MB"  ' Occlum.json)" && \
 echo "${new_json}" > Occlum.json
 
 # 2. Copy program into Occlum Workspace and build

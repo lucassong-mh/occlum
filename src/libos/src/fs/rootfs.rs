@@ -33,6 +33,7 @@ lazy_static! {
         });
         RwLock::new(rootfs)
     };
+    pub static ref IMAGE_SEFS: RwLock<Option<Arc<dyn FileSystem>>> = RwLock::new(None);
 }
 
 pub fn open_root_fs_according_to(
@@ -58,6 +59,7 @@ pub fn open_root_fs_according_to(
         .ok_or_else(|| errno!(Errno::ENOENT, "the image SEFS in layers is not valid"))?;
     let root_image_sefs =
         open_or_create_sefs_according_to(&root_image_sefs_mount_config, user_key)?;
+    *IMAGE_SEFS.write().unwrap() = Some(root_image_sefs.clone());
     // container SEFS in layers
     let root_container_sefs_mount_config = layer_mount_configs
         .iter()
@@ -103,6 +105,26 @@ pub fn mount_nonroot_fs_according_to(
     user_key: &Option<sgx_key_128bit_t>,
     follow_symlink: bool,
 ) -> Result<()> {
+    use self::ConfigMountFsType::*;
+    let mut is_ext2 = false;
+    if let Some(mc) = mount_configs.iter().find(|mc| mc.type_ == TYPE_EXT2) {
+        let disk_size = mc.options.disk_size;
+        let source_path = mc.source.as_ref();
+        let ext2 = open_ext2(disk_size, user_key, source_path)?;
+        let new_rootfs = UnionFS::new(vec![
+            ext2,
+            IMAGE_SEFS.read().unwrap().as_ref().unwrap().clone(),
+        ])
+        .unwrap();
+        *ROOT_FS.write().unwrap() = MountFS::new(new_rootfs);
+        is_ext2 = true;
+    }
+    let new_root = if is_ext2 {
+        ROOT_FS.read().unwrap().root_inode()
+    } else {
+        root.clone()
+    };
+
     for mc in mount_configs {
         if mc.target == Path::new("/") {
             continue;
@@ -112,11 +134,10 @@ pub fn mount_nonroot_fs_according_to(
             return_errno!(EINVAL, "The target path must be absolute");
         }
 
-        use self::ConfigMountFsType::*;
         match mc.type_ {
             TYPE_SEFS => {
                 let sefs = open_or_create_sefs_according_to(&mc, user_key)?;
-                mount_fs_at(sefs, root, &mc.target, follow_symlink)?;
+                mount_fs_at(sefs, &new_root, &mc.target, follow_symlink)?;
             }
             TYPE_HOSTFS => {
                 let source_path =
@@ -134,19 +155,19 @@ pub fn mount_nonroot_fs_according_to(
                 }
 
                 let hostfs = HostFS::new(source_path.unwrap());
-                mount_fs_at(hostfs, root, &mc.target, follow_symlink)?;
+                mount_fs_at(hostfs, &new_root, &mc.target, follow_symlink)?;
             }
             TYPE_RAMFS => {
                 let ramfs = RamFS::new();
-                mount_fs_at(ramfs, root, &mc.target, follow_symlink)?;
+                mount_fs_at(ramfs, &new_root, &mc.target, follow_symlink)?;
             }
             TYPE_DEVFS => {
                 let devfs = dev_fs::init_devfs()?;
-                mount_fs_at(devfs, root, &mc.target, follow_symlink)?;
+                mount_fs_at(devfs, &new_root, &mc.target, follow_symlink)?;
             }
             TYPE_PROCFS => {
                 let procfs = ProcFS::new();
-                mount_fs_at(procfs, root, &mc.target, follow_symlink)?;
+                mount_fs_at(procfs, &new_root, &mc.target, follow_symlink)?;
             }
             TYPE_UNIONFS => {
                 let layer_mcs = mc
@@ -171,13 +192,19 @@ pub fn mount_nonroot_fs_according_to(
                         return_errno!(EINVAL, "Unsupported fs type inside unionfs");
                     }
                 };
-                mount_fs_at(unionfs, root, &mc.target, follow_symlink)?;
+                mount_fs_at(unionfs, &new_root, &mc.target, follow_symlink)?;
             }
             TYPE_EXT2 => {
-                let disk_size = mc.options.disk_size;
-                let source_path = mc.source.as_ref();
-                let ext2 = open_ext2(disk_size, user_key, source_path)?;
-                mount_fs_at(ext2, root, &mc.target, follow_symlink)?;
+                // let disk_size = mc.options.disk_size;
+                // let source_path = mc.source.as_ref();
+                // let ext2 = open_ext2(disk_size, user_key, source_path)?;
+                // let new_rootfs = UnionFS::new(vec![
+                //     ext2,
+                //     IMAGE_SEFS.read().unwrap().as_ref().unwrap().clone(),
+                // ])
+                // .unwrap();
+                // *ROOT_FS.write().unwrap() = MountFS::new(new_rootfs);
+                // mount_fs_at(ext2, root, &mc.target, follow_symlink)?;
             }
         }
     }

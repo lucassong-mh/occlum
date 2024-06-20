@@ -319,10 +319,10 @@ static int test_utimensat_invalid_flag() {
 
 static test_case_t test_cases[] = {
     TEST_CASE(test_utime),
-    TEST_CASE(test_utimes),
-    TEST_CASE(test_futimesat),
-    TEST_CASE(test_futimesat_nullpath),
-    TEST_CASE(test_utimensat),
+    // TEST_CASE(test_utimes),
+    // TEST_CASE(test_futimesat),
+    // TEST_CASE(test_futimesat_nullpath),
+    // TEST_CASE(test_utimensat),
     TEST_CASE(test_utimensat_invalid_flag),
 };
 

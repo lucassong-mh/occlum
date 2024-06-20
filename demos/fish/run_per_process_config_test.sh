@@ -13,7 +13,7 @@ occlum new occlum-test && cd occlum-test
 new_json="$(jq '.resource_limits.user_space_size = "1MB" |
                 .resource_limits.user_space_max_size = "512MB" |
                 .resource_limits.kernel_space_heap_size= "1MB" |
-                .resource_limits.kernel_space_heap_max_size = "64MB" |
+                .resource_limits.kernel_space_heap_max_size = "3000MB" |
                 .process.default_stack_size = "1MB" |
                 .process.default_heap_size = "1MB" |
                 .env.default = [ "OCCLUM=yes", "HOME=/root" ]' Occlum.json)" && \

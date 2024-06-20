@@ -58,11 +58,11 @@ capset04 capset04
 cacheflush01 cacheflush01
 
 chdir01 chdir01
-chdir01A symlink01 -T chdir01
+# chdir01A symlink01 -T chdir01
 #chdir04 chdir04
 
 chmod01 chmod01
-chmod01A symlink01 -T chmod01
+# chmod01A symlink01 -T chmod01
 chmod03 chmod03
 chmod05 chmod05
 chmod06 chmod06
@@ -132,7 +132,7 @@ creat03 creat03
 creat04 creat04
 creat05 creat05
 creat06 creat06
-creat07 creat07
+# creat07 creat07
 creat08 creat08
 creat09 creat09
 

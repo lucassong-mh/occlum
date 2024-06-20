@@ -2,7 +2,7 @@
     "resource_limits": {
         "kernel_space_stack_size": "1MB",
         "kernel_space_heap_size": "1MB",
-        "kernel_space_heap_max_size": "40MB",
+        "kernel_space_heap_max_size": "3000MB",
         "user_space_size": "1MB",
         "user_space_max_size": "600MB",
         "init_num_of_threads": 2,
@@ -73,6 +73,13 @@
             "target": "/host",
             "type": "hostfs",
             "source": "."
+        },
+        {
+            "target": "/ext2",
+            "type": "ext2",
+            "options": {
+                "disk_size": "50GB"
+            }
         }
     ]
 }

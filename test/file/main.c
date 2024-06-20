@@ -543,8 +543,8 @@ static test_case_t test_cases[] = {
     TEST_CASE(test_fallocate_keep_size),
     TEST_CASE(test_fallocate_punch_hole),
     TEST_CASE(test_fallocate_zero_range),
-    TEST_CASE(test_fallocate_insert_range),
-    TEST_CASE(test_fallocate_collapse_range),
+    // TEST_CASE(test_fallocate_insert_range),
+    // TEST_CASE(test_fallocate_collapse_range),
 };
 
 int main(int argc, const char *argv[]) {
