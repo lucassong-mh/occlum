@@ -322,8 +322,9 @@ fn do_exec_thread(libos_tid: pid_t, host_tid: pid_t) -> Result<i32> {
 
     // sync file system
     // TODO: only sync when all processes exit
-    use rcore_fs::vfs::FileSystem;
-    crate::fs::ROOT_FS.read().unwrap().sync()?;
+    // use rcore_fs::vfs::FileSystem;
+    // println!("do_exec_thread sync");
+    // crate::fs::ROOT_FS.read().unwrap().sync()?;
 
     // Not to be confused with the return value of a main function.
     // The exact meaning of status is described in wait(2) man page.
@@ -474,4 +475,16 @@ fn parse_host_files(file_buffer: *const host_file_buffer) -> Result<i32> {
     }
 
     Ok(0)
+}
+
+use crate::ctor::dtor;
+
+#[dtor]
+fn sync_rootfs_when_exit() {
+    // println!("sync rootfs when exit");
+    crate::fs::ROOT_FS
+        .read()
+        .unwrap()
+        .sync()
+        .expect("rootFS sync error");
 }

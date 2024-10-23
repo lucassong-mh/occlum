@@ -21,6 +21,7 @@ TCS_NUM=$(($(nproc) * 2))
 new_json="$(jq --argjson THREAD_NUM ${TCS_NUM} '.resource_limits.user_space_size="2000MB" |
     .resource_limits.kernel_space_heap_max_size="1000MB" |
     .resource_limits.max_num_of_threads = $THREAD_NUM |
+    .feature.enable_posix_shm = true |
     .mount += [{"target": "/ext2", "type": "ext2", "options": {"disk_size": "10GB"}}]' Occlum.json)" && \
 echo "${new_json}" > Occlum.json
 
@@ -35,4 +36,4 @@ BLUE='\033[1;34m'
 NC='\033[0m'
 echo -e "${BLUE}Run filebench on Occlum.${NC}"
 
-occlum run /bin/filebench -f /workloads/${WORKLOAD_FILE}.f
+OCCLUM_LOG_LEVEL=trace occlum run /bin/filebench -f /workloads/${WORKLOAD_FILE}.f
