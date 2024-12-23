@@ -1,0 +1,13 @@
+includes:
+  - base.yaml
+targets:
+  - target: /bin
+    copy:
+      - files:
+        - /opt/occlum/toolchains/bash/glibc/bash
+        - ../go-ycsb/bin/go-ycsb
+        - ../occlum_run.sh
+  - target: /workloads
+    copy:
+      - files:
+        - ../workloada
